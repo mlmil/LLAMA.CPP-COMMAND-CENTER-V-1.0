@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0E0F11;color:#F2EFE6;font-family:Inter,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#E39A2B;text-decoration:none}a:hover{color:#F2EFE6}
+*{box-sizing:border-box}
+::-webkit-scrollbar{width:10px;height:10px}::-webkit-scrollbar-thumb{background:#2a2d32}::-webkit-scrollbar-track{background:transparent}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+input,select{font-family:inherit}
+input:focus,select:focus{outline:2px solid #E39A2B;outline-offset:-1px}
+</style>
+</helmet>
+<div style="min-height:100vh;display:flex;flex-direction:column">
+  <!-- NAV -->
+  <header style="display:flex;align-items:center;justify-content:space-between;padding:0 32px;height:64px;border-bottom:1px solid #2a2d32;flex:none">
+    <div style="display:flex;align-items:baseline;gap:16px">
+      <div style="font-family:'Inter Tight',sans-serif;font-weight:600;font-size:20px;letter-spacing:-0.02em">SPARK<span style="color:#E39A2B">.</span>Ai</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:13px;letter-spacing:0.08em;color:#c7cad0;text-transform:uppercase">llama.cpp Command Center V 1.0 — Orion</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:20px">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:13px;letter-spacing:0.06em;color:#c7cad0;text-transform:uppercase">ROCm 6.4 · 192.168.1.5</div>
+      <button onClick="{{ openSettings }}" style="display:flex;align-items:center;gap:9px;background:none;border:1px solid #E39A2B;color:#E39A2B;font-family:'JetBrains Mono',monospace;font-size:13px;letter-spacing:0.06em;text-transform:uppercase;padding:10px 16px;cursor:pointer" style-hover="background:#E39A2B;color:#0E0F11">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"></path></svg>
+        Model Database
+      </button>
+    </div>
+  </header>
+
+  <!-- SETTINGS DRAWER -->
+  <sc-if value="{{ settingsOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="border-bottom:1px solid #2a2d32;background:#17191C;padding:22px 32px;display:flex;align-items:flex-end;gap:24px;flex:none">
+      <div style="flex:1;display:flex;flex-direction:column;gap:8px">
+        <label style="font-family:'JetBrains Mono',monospace;font-size:13px;letter-spacing:0.08em;color:#c7cad0;text-transform:uppercase">Model database location</label>
+        <input value="{{ modelDirDraft }}" onChange="{{ onModelDirChange }}" spellcheck="false" style="background:#0E0F11;border:1px solid #2a2d32;color:#F2EFE6;font-family:'JetBrains Mono',monospace;font-size:15px;padding:12px 14px;width:100%"></input>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:7px;font-family:'JetBrains Mono',monospace;font-size:13px;letter-spacing:0.05em;color:#c7cad0;text-transform:uppercase">
+        <span>{{ modelCount }} GGUF found</span>
+        <span>{{ libraryTotal }} on disk</span>
+      </div>
+      <button onClick="{{ rescanLibrary }}" style="background:none;border:1px solid #E39A2B;color:#E39A2B;font-family:'JetBrains Mono',monospace;font-size:13px;letter-spacing:0.06em;text-transform:uppercase;padding:12px 18px;cursor:pointer" style-hover="background:#E39A2B;color:#0E0F11">{{ rescanLabel }}</button>
+      <button onClick="{{ closeSettings }}" style="background:none;border:1px solid #2a2d32;color:#c7cad0;font-family:'JetBrains Mono',monospace;font-size:13px;letter-spacing:0.06em;text-transform:uppercase;padding:12px 18px;cursor:pointer" style-hover="border-color:#F2EFE6;color:#F2EFE6">Close</button>
+    </div>
+  </sc-if>
+
+  <!-- MAIN SPLIT -->
+  <div style="{{ mainGridStyle }}">
+
+    <!-- MODEL LIBRARY RAIL -->
+    <aside style="position:relative;border-right:1px solid #2a2d32;display:flex;flex-direction:column;min-height:0;min-width:0">
+      <div onMouseDown="{{ startResize }}" title="Drag to resize" style="position:absolute;top:0;right:-5px;width:10px;height:100%;cursor:col-resize;z-index:10" style-hover="background:#e39a2b33"></div>
+      <div style="padding:20px 22px 14px;border-bottom:1px solid #2a2d32">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:13px;letter-spacing:0.08em;color:#E39A2B;text-transform:uppercase;margin-bottom:10px">§ 01 — Model Library</div>
+        <input placeholder="Filter models…" value="{{ filterText }}" onChange="{{ onFilter }}" style="background:#17191C;border:1px solid #2a2d32;color:#F2EFE6;font-family:'JetBrains Mono',monospace;font-size:14px;padding:11px 12px;width:100%"></input>
+      </div>
+      <div style="flex:1;overflow-y:auto;min-height:0">
+        <sc-for list="{{ models }}" as="m" hint-placeholder-count="6">
+          <div onClick="{{ m.select }}" style="{{ m.rowStyle }}" style-hover="background:#17191C">
+            <sc-if value="{{ m.confirming }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid #e05252;background:#0E0F11;padding:10px 12px;margin-bottom:10px">
+                <span style="font-size:14px;color:#F2EFE6">Move to trash?</span>
+                <div style="display:flex;gap:8px">
+                  <button onClick="{{ m.confirmTrash }}" style="background:#e05252;border:1px solid #e05252;color:#0E0F11;font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;padding:6px 10px;cursor:pointer">Trash</button>
+                  <button onClick="{{ m.cancelTrash }}" style="background:none;border:1px solid #2a2d32;color:#c7cad0;font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:0.05em;text-transform:uppercase;padding:6px 10px;cursor:pointer" style-hover="border-color:#F2EFE6;color:#F2EFE6">Keep</button>
+                </div>
+              </div>
+            </sc-if>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+              <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#c7cad0">{{ m.num }}</span>
+              <div style="display:flex;align-items:center;gap:10px">
+                <span style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;color:{{ m.sizeColor }}">{{ m.size }}</span>
+                <button onClick="{{ m.trash }}" title="Move to trash" style="background:none;border:none;padding:4px;cursor:pointer;color:#e05252;display:flex" style-hover="color:#ff6b6b">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M8 6V4h8v2"></path><path d="M5 6l1 15h12l1-15"></path><path d="M10 11v6M14 11v6"></path></svg>
+                </button>
+              </div>
+            </div>
+            <div style="font-size:15.5px;font-weight:600;line-height:1.4;margin-top:4px;word-break:break-word">{{ m.name }}</div>
+            <div style="display:flex;gap:9px;margin-top:5px;font-family:'JetBrains Mono',monospace;font-size:12.5px;letter-spacing:0.04em;color:#c7cad0;text-transform:uppercase">
+              <span>{{ m.quant }}</span><span>·</span><span>{{ m.params }}</span>
+              <sc-if value="{{ m.loadedOn }}" hint-placeholder-val="{{ false }}"><span style="color:#E39A2B">● {{ m.loadedOn }}</span></sc-if>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="padding:14px 22px;border-top:1px solid #2a2d32;font-family:'JetBrains Mono',monospace;font-size:12.5px;letter-spacing:0.04em;color:#c7cad0;text-transform:uppercase">{{ modelDir }}</div>
+    </aside>
+
+    <!-- GPU PANELS -->
+    <sc-for list="{{ gpus }}" as="g" hint-placeholder-count="2">
+      <section data-screen-label="{{ g.name }}" style="{{ g.panelStyle }}">
+        <!-- panel header -->
+        <div style="padding:20px 26px 16px;border-bottom:1px solid #2a2d32">
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <div style="font-family:'JetBrains Mono',monospace;font-size:13px;letter-spacing:0.08em;color:#E39A2B;text-transform:uppercase">{{ g.label }}</div>
+            <div style="display:flex;align-items:center;gap:9px;font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:{{ g.statusColor }}">
+              <span style="{{ g.dotStyle }}"></span>{{ g.statusText }}
+            </div>
+          </div>
+          <div style="display:flex;align-items:baseline;justify-content:space-between;margin-top:8px;gap:12px;flex-wrap:wrap">
+            <h2 style="font-family:'Inter Tight',sans-serif;font-size:30px;font-weight:500;letter-spacing:-0.02em;margin:0">{{ g.name }}<span style="color:#E39A2B">.</span></h2>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#c7cad0;letter-spacing:0.04em">GPU {{ g.index }} · :{{ g.port }} · {{ g.vramTotal }} GB</span>
+          </div>
+        </div>
+
+        <div style="flex:1;overflow-y:auto;min-height:0;padding:22px 26px;display:flex;flex-direction:column;gap:20px">
+
+          <!-- assigned model -->
+          <div onClick="{{ g.assignSelected }}" style="{{ g.slotStyle }}">
+            <sc-if value="{{ g.hasModel }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+                <div>
+                  <div style="font-family:'JetBrains Mono',monospace;font-size:12.5px;letter-spacing:0.08em;color:#c7cad0;text-transform:uppercase;margin-bottom:7px">Assigned model</div>
+                  <div style="font-size:17px;font-weight:600;line-height:1.35">{{ g.modelName }}</div>
+                  <div style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#c7cad0;margin-top:5px">{{ g.modelMeta }}</div>
+                </div>
+                <button onClick="{{ g.clearModel }}" style="background:none;border:1px solid #2a2d32;color:#c7cad0;font-family:'JetBrains Mono',monospace;font-size:12.5px;letter-spacing:0.05em;text-transform:uppercase;padding:7px 11px;cursor:pointer;flex:none" style-hover="border-color:#F2EFE6;color:#F2EFE6">Clear</button>
+              </div>
+              <!-- VRAM fit bar -->
+              <div style="margin-top:16px">
+                <div style="display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:12.5px;letter-spacing:0.05em;text-transform:uppercase;color:#c7cad0;margin-bottom:6px">
+                  <span>VRAM fit estimate</span><span style="font-weight:700;color:{{ g.fitColor }}">{{ g.fitLabel }}</span>
+                </div>
+                <div style="height:12px;background:#0E0F11;border:1px solid #2a2d32;position:relative">
+                  <div style="{{ g.fitBarStyle }}"></div>
+                </div>
+                <div style="display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:12.5px;color:#c7cad0;margin-top:5px">
+                  <span>{{ g.fitDetail }}</span><span style="flex:none;white-space:nowrap;margin-left:8px">{{ g.vramTotal }} GB</span>
+                </div>
+                <sc-if value="{{ g.fitWarning }}" hint-placeholder-val="{{ false }}">
+                  <div style="margin-top:10px;border:1px solid #E39A2B;padding:10px 12px;display:flex;gap:10px;align-items:flex-start">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#E39A2B" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex:none;margin-top:2px"><path d="M12 3 2 20h20L12 3z"></path><path d="M12 10v5"></path><path d="M12 17.5v.5"></path></svg>
+                    <span style="font-size:14.5px;line-height:1.5;color:#F2EFE6">{{ g.fitWarning }}</span>
+                  </div>
+                </sc-if>
+              </div>
+            </sc-if>
+            <sc-if value="{{ g.noModel }}" hint-placeholder-val="{{ false }}">
+              <div style="text-align:center;padding:12px 0">
+                <div style="font-family:'JetBrains Mono',monospace;font-size:13px;letter-spacing:0.08em;color:#F2EFE6;text-transform:uppercase">No model assigned</div>
+                <div style="font-size:16px;color:#c7cad0;margin-top:9px;line-height:1.55">Select a model in the library, then click here — or press <span style="font-family:'JetBrains Mono',monospace;color:#E39A2B">Assign</span> below.</div>
+              </div>
+            </sc-if>
+          </div>
+
+          <sc-if value="{{ g.showAssign }}" hint-placeholder-val="{{ false }}">
+            <button onClick="{{ g.assignSelected }}" style="background:none;border:1px solid #E39A2B;color:#E39A2B;font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;padding:13px;cursor:pointer;width:100%" style-hover="background:#E39A2B;color:#0E0F11">Assign selected → {{ g.name }}</button>
+          </sc-if>
+
+          <!-- launch params -->
+          <div style="border:1px solid #2a2d32;background:#17191C;padding:18px 20px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:10px;flex-wrap:wrap">
+              <div style="font-family:'JetBrains Mono',monospace;font-size:12.5px;letter-spacing:0.08em;color:#c7cad0;text-transform:uppercase">Launch parameters</div>
+              <select value="{{ g.profile }}" onChange="{{ g.onProfile }}" style="background:#0E0F11;border:1px solid #2a2d32;color:#E39A2B;font-family:'JetBrains Mono',monospace;font-size:13px;letter-spacing:0.04em;text-transform:uppercase;padding:7px 10px;cursor:pointer">
+                <option value="balanced">Profile: Balanced</option>
+                <option value="speed">Profile: Max Speed</option>
+                <option value="context">Profile: Long Context</option>
+                <option value="custom">Profile: Custom</option>
+              </select>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 16px">
+              <sc-for list="{{ g.params }}" as="p" hint-placeholder-count="4">
+                <div style="display:flex;flex-direction:column;gap:5px;min-width:0">
+                  <label style="font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:0.06em;color:#c7cad0;text-transform:uppercase">{{ p.label }}</label>
+                  <input value="{{ p.value }}" onChange="{{ p.onChange }}" style="background:#0E0F11;border:1px solid #2a2d32;color:#F2EFE6;font-family:'JetBrains Mono',monospace;font-size:15px;padding:9px 11px;width:100%"></input>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <!-- launch / stop -->
+          <div style="display:flex;gap:12px">
+            <button onClick="{{ g.toggle }}" disabled="{{ g.launchDisabled }}" style="{{ g.launchStyle }}" style-hover="{{ g.launchHover }}">{{ g.launchLabel }}</button>
+            <sc-if value="{{ g.running }}" hint-placeholder-val="{{ false }}">
+              <a href="{{ g.url }}" style="display:flex;align-items:center;border:1px solid #2a2d32;color:#F2EFE6;font-family:'JetBrains Mono',monospace;font-size:14px;letter-spacing:0.05em;text-transform:uppercase;padding:0 16px" style-hover="border-color:#E39A2B;color:#E39A2B">{{ g.urlLabel }} ↗</a>
+            </sc-if>
+          </div>
+
+          <!-- telemetry -->
+          <div style="border:1px solid #2a2d32;padding:18px 20px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+              <div style="font-family:'JetBrains Mono',monospace;font-size:12.5px;letter-spacing:0.08em;color:#c7cad0;text-transform:uppercase">Telemetry — amd-smi</div>
+              <div style="width:10px;height:10px;background:{{ g.telemDot }};flex:none"></div>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px">
+              <sc-for list="{{ g.telemetry }}" as="t" hint-placeholder-count="4">
+                <div style="min-width:0">
+                  <div style="font-family:'Inter Tight',sans-serif;font-size:27px;font-weight:500;letter-spacing:-0.02em;color:{{ t.color }}">{{ t.value }}<span style="font-size:13px;color:#c7cad0;margin-left:3px">{{ t.unit }}</span></div>
+                  <div style="font-family:'JetBrains Mono',monospace;font-size:11.5px;letter-spacing:0.06em;color:#c7cad0;text-transform:uppercase;margin-top:4px">{{ t.label }}</div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="margin-top:14px">{{ g.sparkline }}</div>
+          </div>
+
+          <!-- log -->
+          <div style="border:1px solid #2a2d32;background:#0B0C0E;padding:14px 16px;font-family:'JetBrains Mono',monospace;font-size:13.5px;line-height:1.7;color:#c7cad0;min-height:110px">
+            <sc-for list="{{ g.log }}" as="line" hint-placeholder-count="3">
+              <div style="color:{{ line.color }}">{{ line.text }}</div>
+            </sc-for>
+          </div>
+        </div>
+      </section>
+    </sc-for>
+  </div>
+
+  <!-- FOOTER -->
+  <footer style="display:flex;align-items:center;justify-content:space-between;padding:14px 32px;border-top:1px solid #2a2d32;font-family:'JetBrains Mono',monospace;font-size:12.5px;letter-spacing:0.04em;color:#c7cad0;text-transform:uppercase;flex:none;gap:12px;flex-wrap:wrap">
+    <span>Orion · Ubuntu 24.04 · ROCm 6.4 · llama.cpp b4970</span>
+    <span>Mike Miller · mike@sparkai805.com · sparkai805.com</span>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;compactDensity&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: false, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;Layout&quot;}, &quot;pollIntervalMs&quot;: {&quot;editor&quot;: &quot;range&quot;, &quot;default&quot;: 1000, &quot;min&quot;: 250, &quot;max&quot;: 5000, &quot;step&quot;: 250, &quot;unit&quot;: &quot;ms&quot;, &quot;tsType&quot;: &quot;number&quot;, &quot;section&quot;: &quot;Telemetry&quot;}}">
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const lib = [
+      ["Llama-3.3-70B-Instruct", "Q4_K_M", "70B", 42.5],
+      ["Qwen2.5-72B-Instruct", "Q4_K_M", "72B", 47.4],
+      ["Llama-3.1-8B-Instruct", "Q8_0", "8B", 8.5],
+      ["Qwen2.5-Coder-32B", "Q4_K_M", "32B", 19.9],
+      ["Mistral-Small-24B-Instruct", "Q5_K_M", "24B", 16.8],
+      ["Gemma-3-27B-it", "Q4_K_M", "27B", 16.5],
+      ["Phi-4-14B", "Q6_K", "14B", 12.0],
+      ["DeepSeek-R1-Distill-Qwen-14B", "Q5_K_M", "14B", 10.5],
+      ["Llama-3.2-3B-Instruct", "Q8_0", "3B", 3.4],
+      ["Qwen2.5-7B-Instruct", "Q6_K", "7B", 6.3],
+      ["Mixtral-8x7B-Instruct", "Q4_K_M", "47B", 26.4],
+      ["CodeLlama-13B-Instruct", "Q5_K_M", "13B", 9.2],
+      ["Hermes-3-Llama-3.1-8B", "Q6_K", "8B", 6.6],
+      ["Nous-Capybara-34B", "Q4_K_M", "34B", 20.2],
+      ["StableLM-Zephyr-3B", "Q8_0", "3B", 2.9],
+      ["OpenChat-3.6-8B", "Q5_K_M", "8B", 5.7],
+      ["Command-R-35B", "Q4_K_M", "35B", 21.5],
+      ["SOLAR-10.7B-Instruct", "Q6_K", "11B", 8.8],
+      ["TinyLlama-1.1B-Chat", "Q8_0", "1B", 1.2],
+      ["WizardCoder-15B", "Q5_K_M", "15B", 10.7],
+    ].map(function (m, i) {
+      return { id: i, name: m[0] + "." + m[1] + ".gguf", base: m[0], quant: m[1], params: m[2], gb: m[3] };
+    });
+    this.lib = lib;
+    this.profiles = {
+      balanced: { ctx: "8192", threads: "8", layers: "999", batch: "512" },
+      speed: { ctx: "4096", threads: "12", layers: "999", batch: "1024" },
+      context: { ctx: "32768", threads: "8", layers: "999", batch: "256" },
+    };
+    this.state = {
+      settingsOpen: false,
+      modelDir: "/media/mikem/WorkDrive_A/Models",
+      modelDirDraft: "/media/mikem/WorkDrive_A/Models",
+      rescanning: false,
+      filter: "",
+      selected: null,
+      trashed: [],
+      confirmTrashId: null,
+      libWidth: 340,
+      tick: 0,
+      gpus: [
+        { key: "a", label: "§ 02 — Primary", name: "RX 7900 XT", index: 0, port: 8081, vramTotal: 20, model: null, running: false, profile: "balanced", params: { ctx: "8192", threads: "8", layers: "999", batch: "512" }, log: [{ t: "[idle] server stopped — awaiting launch", c: "#c7cad0" }], hist: [] },
+        { key: "b", label: "§ 03 — Secondary", name: "RX 6600", index: 1, port: 8082, vramTotal: 8, model: null, running: false, profile: "balanced", params: { ctx: "8192", threads: "8", layers: "999", batch: "512" }, log: [{ t: "[idle] server stopped — awaiting launch", c: "#c7cad0" }], hist: [] },
+      ],
+    };
+  }
+  componentDidMount() {
+    this.timer = setInterval(() => {
+      this.setState(function (s) {
+        const gpus = s.gpus.map(function (g) {
+          if (!g.running) return g;
+          const hist = g.hist.concat([Math.random()]).slice(-40);
+          return Object.assign({}, g, { hist: hist });
+        });
+        return { tick: s.tick + 1, gpus: gpus };
+      });
+    }, 1000);
+  }
+  componentWillUnmount() { clearInterval(this.timer); this.endResize && this.endResize(); }
+  startResize(e) {
+    e.preventDefault();
+    const self = this;
+    const startX = e.clientX, startW = this.state.libWidth;
+    const move = function (ev) { self.setState({ libWidth: Math.max(240, Math.min(640, startW + ev.clientX - startX)) }); };
+    const up = function () { self.endResize && self.endResize(); };
+    this.endResize = function () {
+      document.removeEventListener("mousemove", move);
+      document.removeEventListener("mouseup", up);
+      document.body.style.userSelect = "";
+      self.endResize = null;
+    };
+    document.body.style.userSelect = "none";
+    document.addEventListener("mousemove", move);
+    document.addEventListener("mouseup", up);
+  }
+  updateGpu(key, patch) {
+    this.setState(function (s) {
+      return { gpus: s.gpus.map(function (g) { return g.key === key ? Object.assign({}, g, typeof patch === "function" ? patch(g) : patch) : g; }) };
+    });
+  }
+  estKvGb(g) {
+    const ctx = parseInt(g.params.ctx) || 8192;
+    return ctx / 8192 * (g.model ? Math.max(0.5, g.model.gb * 0.045) : 0.8);
+  }
+  launch(g) {
+    if (!g.model) return;
+    const self = this;
+    const name = g.model.name;
+    this.updateGpu(g.key, { running: true, log: [{ t: "[launch] llama-server --port " + g.port + " -ngl " + g.params.layers + " -c " + g.params.ctx, c: "#F2EFE6" }] });
+    const lines = [
+      ["[env] ROCR_VISIBLE_DEVICES=" + g.index + " HIP_VISIBLE_DEVICES=" + g.index, "#c7cad0", 700],
+      ["[load] " + name, "#c7cad0", 1400],
+      ["[rocm] offloading layers to " + g.name + " (gfx" + (g.index === 0 ? "1100" : "1032") + ")", "#c7cad0", 2400],
+      ["[ok] model loaded — listening on http://192.168.1.5:" + g.port, "#E39A2B", 3400],
+      ["[health] /health → 200 OK", "#c7cad0", 4200],
+    ];
+    lines.forEach(function (l) {
+      setTimeout(function () {
+        self.updateGpu(g.key, function (cur) {
+          if (!cur.running) return {};
+          return { log: cur.log.concat([{ t: l[0], c: l[1] }]).slice(-8) };
+        });
+      }, l[2]);
+    });
+  }
+  stop(g) {
+    this.updateGpu(g.key, function (cur) {
+      return { running: false, hist: [], log: cur.log.concat([{ t: "[stop] SIGTERM sent — server stopped", c: "#F2EFE6" }]).slice(-8) };
+    });
+  }
+  spark(g) {
+    const pts = g.hist;
+    if (!g.running || pts.length < 2) return React.createElement("div", { style: { height: 38, borderTop: "1px solid #2a2d32", display: "flex", alignItems: "center", fontFamily: "'JetBrains Mono',monospace", fontSize: 11.5, letterSpacing: "0.06em", color: "#c7cad0", textTransform: "uppercase", paddingTop: 8 } }, "GPU load — no data (server stopped)");
+    const w = 100, h = 30;
+    const d = pts.map(function (p, i) { return (i === 0 ? "M" : "L") + (i / (pts.length - 1) * w).toFixed(1) + "," + (h - 4 - p * (h - 8)).toFixed(1); }).join(" ");
+    return React.createElement("svg", { viewBox: "0 0 100 30", preserveAspectRatio: "none", style: { width: "100%", height: 38, display: "block", borderTop: "1px solid #2a2d32", paddingTop: 6 } },
+      React.createElement("path", { d: d, fill: "none", stroke: "#E39A2B", strokeWidth: 1.5, vectorEffect: "non-scaling-stroke" }));
+  }
+  renderVals() {
+    const self = this;
+    const s = this.state;
+    const filtered = this.lib.filter(function (m) { return s.trashed.indexOf(m.id) === -1 && m.name.toLowerCase().includes(s.filter.toLowerCase()); });
+    const loadedMap = {};
+    s.gpus.forEach(function (g) { if (g.model && g.running) loadedMap[g.model.id] = g.name; });
+    const models = filtered.map(function (m, i) {
+      const sel = s.selected === m.id;
+      return {
+        num: String(i + 1).padStart(2, "0"),
+        name: m.name, quant: m.quant, params: m.params,
+        size: m.gb.toFixed(1) + " GB",
+        sizeColor: m.gb > 20 ? "#E39A2B" : "#c7cad0",
+        loadedOn: loadedMap[m.id] || false,
+        rowStyle: "padding:14px 22px;border-bottom:1px solid #ffffff14;cursor:pointer;" + (sel ? "background:#17191C;box-shadow:inset 3px 0 0 #E39A2B" : ""),
+        select: function () { self.setState({ selected: sel ? null : m.id }); },
+        confirming: s.confirmTrashId === m.id,
+        trash: function (e) { e.stopPropagation(); self.setState({ confirmTrashId: m.id }); },
+        cancelTrash: function (e) { e.stopPropagation(); self.setState({ confirmTrashId: null }); },
+        confirmTrash: function (e) {
+          e.stopPropagation();
+          self.setState(function (cur) {
+            return {
+              trashed: cur.trashed.concat([m.id]),
+              confirmTrashId: null,
+              selected: cur.selected === m.id ? null : cur.selected,
+              gpus: cur.gpus.map(function (g) {
+                if (g.model && g.model.id === m.id && !g.running) return Object.assign({}, g, { model: null, log: [{ t: "[idle] server stopped — awaiting launch", c: "#c7cad0" }] });
+                return g;
+              }),
+            };
+          });
+        },
+      };
+    });
+    const selectedModel = this.lib.find(function (m) { return m.id === s.selected; }) || null;
+    const gpus = s.gpus.map(function (g) {
+      const kv = self.estKvGb(g);
+      const need = g.model ? g.model.gb + kv : 0;
+      const pct = g.model ? Math.min(need / g.vramTotal * 100, 100) : 0;
+      const over = need > g.vramTotal;
+      const tight = !over && need > g.vramTotal * 0.85;
+      const fitColor = over ? "#e05252" : tight ? "#E39A2B" : "#7da77f";
+      const running = g.running;
+      const t = s.tick;
+      const rnd = function (seed, lo, hi) { return lo + (Math.sin(t * 0.7 + seed + g.index * 9) * 0.5 + 0.5) * (hi - lo); };
+      const canLaunch = !!g.model && !over;
+      return {
+        key: g.key, label: g.label, name: g.name, index: g.index, port: g.port, vramTotal: g.vramTotal,
+        panelStyle: "display:flex;flex-direction:column;min-height:0;min-width:0;" + (g.index === 0 ? "border-right:1px solid #2a2d32;" : ""),
+        statusText: running ? "Running" : "Stopped",
+        statusColor: running ? "#E39A2B" : "#c7cad0",
+        dotStyle: "width:10px;height:10px;flex:none;background:" + (running ? "#E39A2B;animation:blink 2s infinite" : "#2a2d32"),
+        hasModel: !!g.model, noModel: !g.model,
+        modelName: g.model ? g.model.name : "",
+        modelMeta: g.model ? g.model.quant + " · " + g.model.params + " · " + g.model.gb.toFixed(1) + " GB on disk" : "",
+        slotStyle: "border:1px " + (g.model ? "solid" : "dashed") + " #2a2d32;background:#17191C;padding:18px 20px;" + (!g.model && selectedModel ? "cursor:pointer;border-color:#E39A2B;" : ""),
+        clearModel: function (e) { e.stopPropagation(); self.updateGpu(g.key, { model: null, running: false, hist: [], log: [{ t: "[idle] server stopped — awaiting launch", c: "#c7cad0" }] }); },
+        assignSelected: function () { if (selectedModel && !g.running) self.updateGpu(g.key, { model: selectedModel }); },
+        showAssign: !!selectedModel && !g.running && (!g.model || g.model.id !== selectedModel.id),
+        fitLabel: !g.model ? "" : over ? "Will not fit" : tight ? "Tight fit" : "Fits",
+        fitColor: fitColor,
+        fitBarStyle: "position:absolute;inset:0;width:" + pct.toFixed(1) + "%;background:" + fitColor,
+        fitDetail: g.model ? need.toFixed(1) + " GB est. (" + g.model.gb.toFixed(1) + " weights + " + kv.toFixed(1) + " KV @ " + g.params.ctx + " ctx)" : "",
+        fitWarning: over ? "Model + KV cache exceeds " + g.vramTotal + " GB VRAM. Reduce context, choose a smaller quant, or lower GPU layers to split with CPU." : (tight ? "Less than 15% VRAM headroom — desktop compositor may contend for memory." : false),
+        profile: g.profile,
+        onProfile: function (e) {
+          const v = e.target.value;
+          const p = self.profiles[v];
+          self.updateGpu(g.key, p ? { profile: v, params: Object.assign({}, p) } : { profile: v });
+        },
+        params: ["ctx", "threads", "layers", "batch"].map(function (k) {
+          const labels = { ctx: "Context (-c)", threads: "Threads (-t)", layers: "GPU layers (-ngl)", batch: "Batch (-b)" };
+          return {
+            label: labels[k], value: g.params[k],
+            onChange: function (e) {
+              const v = e.target.value;
+              self.updateGpu(g.key, function (cur) { const p = Object.assign({}, cur.params); p[k] = v; return { params: p, profile: "custom" }; });
+            },
+          };
+        }),
+        running: running,
+        toggle: function () { running ? self.stop(g) : self.launch(g); },
+        launchDisabled: !running && !canLaunch,
+        launchLabel: running ? "■ Stop server" : "▶ Launch on GPU " + g.index + " · :" + g.port,
+        launchStyle: "flex:1;font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;padding:14px;cursor:" + (!running && !canLaunch ? "not-allowed" : "pointer") + ";border:1px solid " + (running ? "#2a2d32;background:none;color:#F2EFE6" : canLaunch ? "#E39A2B;background:#E39A2B;color:#0E0F11" : "#2a2d32;background:none;color:#8a8d92"),
+        launchHover: running ? "border-color:#e05252;color:#e05252" : canLaunch ? "background:none;color:#E39A2B" : "",
+        url: "http://192.168.1.5:" + g.port,
+        urlLabel: ":" + g.port,
+        telemDot: running ? "#E39A2B" : "#2a2d32",
+        telemetry: [
+          { label: "Edge temp", value: running ? rnd(2, g.index === 0 ? 62 : 55, g.index === 0 ? 78 : 68).toFixed(0) : "—", unit: "°C", color: running && rnd(2, 62, 78) > 75 ? "#E39A2B" : "#F2EFE6" },
+          { label: "VRAM used", value: running && g.model ? Math.min(g.model.gb + self.estKvGb(g), g.vramTotal).toFixed(1) : "—", unit: "GB", color: "#F2EFE6" },
+          { label: "Power", value: running ? rnd(3, g.index === 0 ? 180 : 70, g.index === 0 ? 305 : 130).toFixed(0) : "—", unit: "W", color: "#F2EFE6" },
+          { label: "Gen speed", value: running ? rnd(4, g.index === 0 ? 28 : 9, g.index === 0 ? 46 : 16).toFixed(1) : "—", unit: "tok/s", color: running ? "#E39A2B" : "#F2EFE6" },
+        ],
+        sparkline: self.spark(g),
+        log: g.log.map(function (l) { return { text: l.t, color: l.c }; }),
+      };
+    });
+    return {
+      mainGridStyle: "flex:1;display:grid;grid-template-columns:" + s.libWidth + "px 1fr 1fr;min-height:0",
+      startResize: this.startResize.bind(this),
+      settingsOpen: s.settingsOpen,
+      openSettings: function () { self.setState({ settingsOpen: !s.settingsOpen }); },
+      closeSettings: function () { self.setState({ settingsOpen: false }); },
+      modelDir: s.modelDir,
+      modelDirDraft: s.modelDirDraft,
+      onModelDirChange: function (e) { self.setState({ modelDirDraft: e.target.value }); },
+      rescanning: s.rescanning,
+      rescanLabel: s.rescanning ? "Scanning…" : "Rescan",
+      rescanLibrary: function () {
+        self.setState({ rescanning: true, modelDir: s.modelDirDraft });
+        setTimeout(function () { self.setState({ rescanning: false }); }, 900);
+      },
+      modelCount: this.lib.length,
+      libraryTotal: this.lib.reduce(function (a, m) { return a + m.gb; }, 0).toFixed(0) + " GB",
+      filterText: s.filter,
+      onFilter: function (e) { self.setState({ filter: e.target.value }); },
+      models: models,
+      gpus: gpus,
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+[Unit]
+Description=GPU Command Center
+After=network.target
+
+[Service]
+WorkingDirectory=/home/mikem/gpu-command-center
+ExecStart=/home/mikem/Desktop/ROCm-TUI/.venv/bin/python -m uvicorn app:app --host 0.0.0.0 --port 8000
+Restart=on-failure
+Environment=MODEL_DIR=/media/mikem/WorkDrive_A/Models
+Environment=LLAMA_SERVER=/home/mikem/llama.cpp/build-rocm/bin/llama-server
+
+[Install]
+WantedBy=multi-user.target
