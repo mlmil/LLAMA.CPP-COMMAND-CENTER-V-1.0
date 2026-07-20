@@ -18,6 +18,7 @@ class Launch(BaseModel):
     threads: int = 8
     layers: int = 999
     batch: int = 512
+    kv_offload: bool = False
 
 class DatabasePath(BaseModel):
     path: str
@@ -70,6 +71,8 @@ def launch(idx: int, req: Launch):
         g=GPUS[idx]
         env={**os.environ, 'ROCR_VISIBLE_DEVICES': str(idx), 'HIP_VISIBLE_DEVICES': str(idx)}
         cmd=[LLAMA, '--model', str(path), '--host', '0.0.0.0', '--port', str(g['port']), '-c', str(req.ctx), '-t', str(req.threads), '-ngl', str(req.layers), '-b', str(req.batch)]
+        if req.kv_offload:
+            cmd.append('--no-kv-offload')
         log=open(f'/tmp/gpu-command-center-{idx}.log','ab', buffering=0)
         procs[idx]=subprocess.Popen(cmd, env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
     return {'ok': True, 'pid': procs[idx].pid, 'port': g['port'], 'command': cmd}
