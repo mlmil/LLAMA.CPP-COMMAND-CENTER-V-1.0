@@ -38,12 +38,27 @@ def rescan(req: DatabasePath):
     MODEL_DIR = p
     return {'model_dir': str(MODEL_DIR), 'models': models()}
 
+@app.delete('/api/model')
+def delete_model(path: str):
+    target = Path(path).expanduser().resolve()
+    try:
+        target.relative_to(MODEL_DIR.resolve())
+    except ValueError:
+        raise HTTPException(400, 'Model must be inside model directory')
+    if not target.is_file() or target.suffix.lower() != '.gguf':
+        raise HTTPException(400, 'Only GGUF model files can be deleted')
+    try:
+        target.unlink()
+    except OSError as e:
+        raise HTTPException(500, f'Could not delete model: {e}')
+    return {'ok': True, 'deleted': str(target)}
+
 @app.get('/api/gpus')
 def get_gpus():
     out=[]
     for g in GPUS:
         p=procs.get(g['index'])
-        out.append({**g, 'running': bool(p and p.poll() is None), 'pid': p.pid if p else None})
+        out.append({**g, 'running': bool(p and p.poll() is None), 'pid': p.pid if p else None, 'model': getattr(p, 'model_path', None) if p and p.poll() is None else None})
     return out
 
 @app.get('/api/resources')
@@ -87,6 +102,7 @@ def launch(idx: int, req: Launch):
             cmd.append('--no-kv-offload')
         log=open(f'/tmp/gpu-command-center-{idx}.log','ab', buffering=0)
         procs[idx]=subprocess.Popen(cmd, env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+        procs[idx].model_path = str(path)
     return {'ok': True, 'pid': procs[idx].pid, 'port': g['port'], 'command': cmd}
 
 @app.post('/api/gpu/{idx}/stop')
