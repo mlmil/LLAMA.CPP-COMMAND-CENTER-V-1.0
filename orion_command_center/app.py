@@ -18,6 +18,7 @@ class Launch(BaseModel):
     threads: int = 8
     layers: int = 999
     batch: int = 512
+    kv_offload: bool = False
 
 class DatabasePath(BaseModel):
     path: str
@@ -37,13 +38,40 @@ def rescan(req: DatabasePath):
     MODEL_DIR = p
     return {'model_dir': str(MODEL_DIR), 'models': models()}
 
+@app.delete('/api/model')
+def delete_model(path: str):
+    target = Path(path).expanduser().resolve()
+    try:
+        target.relative_to(MODEL_DIR.resolve())
+    except ValueError:
+        raise HTTPException(400, 'Model must be inside model directory')
+    if not target.is_file() or target.suffix.lower() != '.gguf':
+        raise HTTPException(400, 'Only GGUF model files can be deleted')
+    try:
+        target.unlink()
+    except OSError as e:
+        raise HTTPException(500, f'Could not delete model: {e}')
+    return {'ok': True, 'deleted': str(target)}
+
 @app.get('/api/gpus')
 def get_gpus():
     out=[]
     for g in GPUS:
         p=procs.get(g['index'])
-        out.append({**g, 'running': bool(p and p.poll() is None), 'pid': p.pid if p else None})
+        out.append({**g, 'running': bool(p and p.poll() is None), 'pid': p.pid if p else None, 'model': getattr(p, 'model_path', None) if p and p.poll() is None else None})
     return out
+
+@app.get('/api/resources')
+def resources():
+    mem={}
+    for line in Path('/proc/meminfo').read_text().splitlines():
+        key, value=line.split(':',1)
+        mem[key]=int(value.split()[0])*1024
+    total=mem.get('MemTotal',0)
+    available=mem.get('MemAvailable',0)
+    return {'ram_total': total, 'ram_used': total-available,
+            'processes': {str(i): int(p.memory_info().rss) if p and p.poll() is None else 0
+                          for i,p in procs.items()}}
 
 @app.get('/api/gpu/{idx}/telemetry')
 def telemetry(idx: int):
@@ -70,8 +98,11 @@ def launch(idx: int, req: Launch):
         g=GPUS[idx]
         env={**os.environ, 'ROCR_VISIBLE_DEVICES': str(idx), 'HIP_VISIBLE_DEVICES': str(idx)}
         cmd=[LLAMA, '--model', str(path), '--host', '0.0.0.0', '--port', str(g['port']), '-c', str(req.ctx), '-t', str(req.threads), '-ngl', str(req.layers), '-b', str(req.batch)]
+        if req.kv_offload:
+            cmd.append('--no-kv-offload')
         log=open(f'/tmp/gpu-command-center-{idx}.log','ab', buffering=0)
         procs[idx]=subprocess.Popen(cmd, env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+        procs[idx].model_path = str(path)
     return {'ok': True, 'pid': procs[idx].pid, 'port': g['port'], 'command': cmd}
 
 @app.post('/api/gpu/{idx}/stop')
@@ -98,8 +129,8 @@ def index():
     html = html.replace('class="outline">⚙ MODEL DATABASE', 'class="outline" onclick="toggleDb()">⚙ MODEL DATABASE')
     drawer = '<div id="db" style="display:none;background:#17191c;border-bottom:1px solid #2a2d32;padding:20px 32px"><div class="mono">MODEL DATABASE LOCATION</div><input id="dbpath" value="'+str(MODEL_DIR)+'" style="margin-top:8px;width:70%;background:#0e0f11;border:1px solid #2a2d32;color:#f2efe6;padding:12px;font:14px JetBrains Mono"><button class="outline" onclick="rescan()">RESCAN</button><span id="dbmsg" class="mono"></span></div>'
     html = html.replace('<main class="grid">', drawer+'<main class="grid">', 1)
-    html = html.replace('</body></html>', '<div id="resizeRail" style="position:fixed;top:64px;bottom:0;left:335px;width:10px;cursor:col-resize;z-index:20"></div>\n<script>(function(){let r=document.getElementById("resizeRail"),w=+localStorage.getItem("railWidth")||340;function set(v){w=Math.max(240,Math.min(640,v));document.documentElement.style.setProperty("--rail",w+"px");r.style.left=(w-5)+"px";localStorage.setItem("railWidth",w)}set(w);r.onpointerdown=e=>{r.setPointerCapture(e.pointerId);r.onpointermove=x=>set(x.clientX);r.onpointerup=()=>{r.onpointermove=null}}})();(function(){function restore(){document.querySelectorAll(".gpu").forEach((p,i)=>p.querySelectorAll(".params input").forEach((x,j)=>{let v=localStorage.getItem("gpu"+i+"param"+j);if(v!==null)x.value=v}))}document.addEventListener("input",e=>{if(e.target.closest(".gpu .params")){let p=e.target.closest(".gpu"),i=[...document.querySelectorAll(".gpu")].indexOf(p),j=[...p.querySelectorAll(".params input")].indexOf(e.target);localStorage.setItem("gpu"+i+"param"+j,e.target.value)}});new MutationObserver(restore).observe(document.querySelector(".grid"),{childList:true,subtree:true});restore()})();async function telemetry(){for(let i=0;i<2;i++){try{let d=await fetch("/api/gpu/"+i+"/telemetry").then(x=>x.json()),v=JSON.parse(d.raw)[0],m=document.querySelectorAll("#gpu"+i+" .metric strong");if(m.length){m[0].textContent=(v.hotspot_temperature?.value??"—")+"°";m[1].textContent=((v.vram_used?.value??0)/1024).toFixed(1)+" GB";m[2].textContent=(v.power_usage?.value??"—")+" W";m[3].textContent=v.gfx?.value??"—"}}catch(e){}}}telemetry();setInterval(telemetry,2000);</script></body></html>')
-    html = html.replace('</body></html>', '<script>function toggleDb(){let x=document.getElementById("db");x.style.display=x.style.display==="none"?"block":"none"}async function rescan(){let p=document.getElementById("dbpath").value,m=await fetch("/api/rescan",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({path:p})});let d=await m.json();document.getElementById("dbmsg").textContent=d.model_dir||d.detail||"";if(m.ok){models=d.models;draw()}}</script></body></html>')
+    html = html.replace('((v.vram_used?.value??0)/1024).toFixed(1)+" GB"', '((v.vram_used?.value??0)/1024).toFixed(2)+" GB"')
+    html = html.replace('</body></html>', '<script>function toggleDb(){let x=document.getElementById("db");x.style.display=x.style.display==="none"?"block":"none"}async function rescan(){let p=document.getElementById("dbpath").value,m=await fetch("/api/rescan",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({path:p})});let d=await m.json();document.getElementById("dbmsg").textContent=d.model_dir||d.detail||"";if(m.ok){models=d.models;draw()}}function fmt(b){return (b/1073741824).toFixed(1)+" GB"}async function resources(){try{let d=await fetch("/api/resources").then(x=>x.json()),x=document.getElementById("resourceReadout");if(!x){x=document.createElement("div");x.id="resourceReadout";x.style="position:fixed;right:24px;bottom:20px;background:#17191c;border:1px solid #2a2d32;padding:12px 16px;color:#c7cad0;font:11px JetBrains Mono;z-index:30;line-height:1.7";document.body.appendChild(x)}x.innerHTML="RAM "+fmt(d.ram_used)+" / "+fmt(d.ram_total)+"<br>GPU 0 process RAM "+fmt(d.processes["0"]||0)+"<br>GPU 1 process RAM "+fmt(d.processes["1"]||0)}catch(e){}}resources();setInterval(resources,2000)</script></body></html>')
     return html
 
 @app.get('/design', response_class=HTMLResponse)
